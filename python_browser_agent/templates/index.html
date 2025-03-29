@@ -109,6 +109,29 @@
             background-color: var(--error-bg-dark);
             color: var(--error-text-dark);
         }
+        .screenshot-container {
+            margin: 10px 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .screenshot-img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid var(--border-color-dark);
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: block;
+            max-height: 600px;
+            object-fit: contain;
+        }
+        .screenshot-description {
+            font-size: 0.85rem;
+            margin-top: 5px;
+            color: var(--text-color-dark);
+            text-align: center;
+        }
         .chat-input {
             display: flex;
             padding: 10px;
@@ -206,8 +229,141 @@
              background-color: #0d6efd;
              border-color: #0d6efd;
         }
-
-
+        body.light-mode .screenshot-description {
+            color: var(--text-color-light);
+        }
+        body.light-mode .screenshot-img {
+            border: 1px solid var(--border-color-light);
+        }
+        /* Gallery view styles */
+        .screenshot-gallery {
+            margin: 15px 0;
+            width: 100%;
+            position: relative;
+        }
+        .gallery-container {
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+            border-radius: 5px;
+            min-height: 300px; /* Ensure container has minimum height */
+            border: 1px solid var(--border-color-dark);
+            background-color: rgba(0,0,0,0.03);
+        }
+        .gallery-slides {
+            display: flex;
+            transition: transform 0.4s ease-in-out;
+            width: 100%;
+            position: relative;
+        }
+        .gallery-slide {
+            flex: 0 0 100%;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            position: relative;
+        }
+        .gallery-slide.active {
+            display: flex;
+        }
+        .screenshot-img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid var(--border-color-dark);
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: block;
+            max-height: 600px;
+            object-fit: contain;
+        }
+        .placeholder-img {
+            width: 100%;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(0,0,0,0.1);
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .gallery-nav {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 5px;
+        }
+        .gallery-btn {
+            background: var(--input-bg-dark);
+            color: var(--text-color-dark);
+            border: 1px solid var(--border-color-dark);
+            border-radius: 4px;
+            padding: 5px 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.8rem;
+            min-width: 80px;
+            text-align: center;
+        }
+        .gallery-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .gallery-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .gallery-indicators {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin-top: 8px;
+        }
+        .gallery-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--border-color-dark);
+            cursor: pointer;
+            opacity: 0.5;
+            transition: all 0.2s ease;
+        }
+        .gallery-indicator.active {
+            opacity: 1;
+            transform: scale(1.2);
+            background-color: var(--user-msg-bg-dark);
+        }
+        /* Light mode adjustments */
+        body.light-mode .gallery-btn {
+            background: var(--input-bg-light);
+            color: var(--text-color-light);
+            border: 1px solid var(--border-color-light);
+        }
+        body.light-mode .gallery-indicator {
+            background-color: var(--border-color-light);
+        }
+        body.light-mode .gallery-indicator.active {
+            background-color: var(--user-msg-bg-light);
+        }
+        /* Animation for adding new screenshots */
+        @keyframes fadeInScale {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        .screenshot-gallery {
+            animation: fadeInScale 0.3s ease-out;
+        }
+        body.light-mode .gallery-container {
+            border: 1px solid var(--border-color-light);
+            background-color: rgba(0,0,0,0.01);
+        }
     </style>
 </head>
 <body>
@@ -246,7 +402,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const socket = io();
-            const chatMessages = document.getElementById('chat-messages');
+            const chatMessages = document.querySelector('.chat-messages');
             const userInput = document.getElementById('user-input');
             const sendBtn = document.getElementById('send-btn');
             const themeToggleButton = document.getElementById('theme-toggle-button');
@@ -315,18 +471,28 @@
                     messageElement = addMessage('', 'agent', id); // Create if not exists
                 }
                 
+                // Save the existing gallery if it exists
+                const existingGallery = messageElement.querySelector('.screenshot-gallery');
+                const galleryHTML = existingGallery ? existingGallery.outerHTML : '';
+                
                 // Clear existing classes related to agent states
                 messageElement.classList.remove('thinking', 'progress-message', 'error', 'agent-message');
 
                 // Add base class and specific type class
                 messageElement.classList.add('message', type);
                 
-                 // Render basic markdown (bold, italics, code blocks)
+                // Render basic markdown (bold, italics, code blocks)
                 let htmlContent = content.replace(/```(?:\w+\n)?([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
                 htmlContent = htmlContent.replace(/\*\*([\s\S]*?)\*\*/g, '<strong>$1</strong>');
                 htmlContent = htmlContent.replace(/\*([\s\S]*?)\*/g, '<em>$1</em>');
                 htmlContent = htmlContent.replace(/`([^`]+)`/g, '<code>$1</code>');
-                messageElement.innerHTML = htmlContent; 
+                messageElement.innerHTML = htmlContent;
+                
+                // Re-append gallery if it existed
+                if (galleryHTML) {
+                    messageElement.innerHTML += galleryHTML;
+                    initGalleryControls(messageElement.querySelector('.screenshot-gallery'));
+                }
 
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             }
@@ -344,26 +510,358 @@
                     case 'thinking':
                         thinkingMessageId = `msg-${Date.now()}`;
                         updateMessage(thinkingMessageId, data.message, 'thinking');
+                        
+                        // Preserve existing gallery if it exists in the message
+                        setTimeout(() => {
+                            const messageEl = document.querySelector(`[data-id="${thinkingMessageId}"]`);
+                            if (messageEl) {
+                                // Preserve existing gallery content if any
+                                const existingGalleryHTML = messageEl.querySelector('.screenshot-gallery')?.outerHTML || '';
+                                
+                                // Add placeholder gallery only if no gallery exists
+                                if (!existingGalleryHTML) {
+                                    const placeholderHTML = `
+                                        <div class="screenshot-gallery" id="gallery-${Date.now()}">
+                                            <div class="gallery-container">
+                                                <div class="gallery-slides">
+                                                    <div class="gallery-slide active" data-index="0" style="display: flex;">
+                                                        <div class="placeholder-img">
+                                                            <i class="fas fa-image fa-3x"></i>
+                                                        </div>
+                                                        <div class="screenshot-description">Waiting for screenshots...</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="gallery-nav">
+                                                <button class="gallery-btn first-btn" disabled>&laquo; First</button>
+                                                <button class="gallery-btn prev-btn" disabled>&lsaquo; Prev</button>
+                                                <button class="gallery-btn next-btn" disabled>Next &rsaquo;</button>
+                                                <button class="gallery-btn last-btn" disabled>Last &raquo;</button>
+                                            </div>
+                                            <div class="gallery-indicators">
+                                                <div class="gallery-indicator active" data-index="0"></div>
+                                            </div>
+                                        </div>
+                                    `;
+                                    messageEl.innerHTML += placeholderHTML;
+                                    initGalleryControls(messageEl.querySelector('.screenshot-gallery'));
+                                }
+                            }
+                        }, 100); // Small delay to ensure the thinking message is rendered first
                         break;
                     case 'progress':
                         if (thinkingMessageId) {
-                            updateMessage(thinkingMessageId, data.message, 'progress-message');
+                            const messageEl = document.querySelector(`[data-id="${thinkingMessageId}"]`);
+                            if (messageEl) {
+                                // Save existing gallery
+                                const existingGallery = messageEl.querySelector('.screenshot-gallery');
+                                const galleryHTML = existingGallery ? existingGallery.outerHTML : '';
+                                
+                                // Update message
+                                updateMessage(thinkingMessageId, data.message, 'progress-message');
+                                
+                                // Restore gallery if it existed
+                                if (galleryHTML) {
+                                    setTimeout(() => {
+                                        const updatedEl = document.querySelector(`[data-id="${thinkingMessageId}"]`);
+                                        if (updatedEl && !updatedEl.querySelector('.screenshot-gallery')) {
+                                            updatedEl.innerHTML += galleryHTML;
+                                            initGalleryControls(updatedEl.querySelector('.screenshot-gallery'));
+                                        }
+                                    }, 50);
+                                }
+                            } else {
+                                updateMessage(thinkingMessageId, data.message, 'progress-message');
+                            }
                         }
+                        break;
+                    case 'screenshot':
+                        // Create or update screenshot display
+                        const screenshotId = `screenshot-${Date.now()}`;
+                        
+                        // Find if there's an existing gallery in the current message
+                        let galleryEl = null;
+                        let messageEl = null;
+                        
+                        if (thinkingMessageId) {
+                            messageEl = document.querySelector(`[data-id="${thinkingMessageId}"]`);
+                            if (messageEl) {
+                                galleryEl = messageEl.querySelector('.screenshot-gallery');
+                            }
+                        }
+                        
+                        if (!galleryEl) {
+                            // Create a new gallery structure
+                            const galleryHTML = `
+                                <div class="screenshot-gallery" id="gallery-${Date.now()}">
+                                    <div class="gallery-container">
+                                        <div class="gallery-slides">
+                                            <div class="gallery-slide active" data-index="0" style="display: flex;">
+                                                <img src="data:image/png;base64,${data.screenshot}" class="screenshot-img" alt="Browser screenshot" 
+                                                     onerror="console.error('Image load error'); this.src='data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22800%22%20height%3D%22400%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20800%20400%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3Cstyle%20type%3D%22text%2Fcss%22%3E%23holder_1%20text%20%7B%20fill%3A%23555%3Bfont-weight%3Anormal%3Bfont-family%3AHelvetica%2C%20monospace%3Bfont-size%3A40pt%20%7D%20%3C%2Fstyle%3E%3C%2Fdefs%3E%3Cg%20id%3D%22holder_1%22%3E%3Crect%20width%3D%22800%22%20height%3D%22400%22%20fill%3D%22%23777%22%3E%3C%2Frect%3E%3Cg%3E%3Ctext%20x%3D%22285.921875%22%20y%3D%22217.7%22%3EImage%20Not%20Available%3C%2Ftext%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E';"
+                                                     onload="console.log('Image loaded successfully');" />
+                                                <div class="screenshot-description">${data.description}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="gallery-nav">
+                                        <button class="gallery-btn first-btn" disabled>&laquo; First</button>
+                                        <button class="gallery-btn prev-btn" disabled>&lsaquo; Prev</button>
+                                        <button class="gallery-btn next-btn" disabled>Next &rsaquo;</button>
+                                        <button class="gallery-btn last-btn" disabled>Last &raquo;</button>
+                                    </div>
+                                    <div class="gallery-indicators">
+                                        <div class="gallery-indicator active" data-index="0"></div>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            if (messageEl) {
+                                // Replace placeholder gallery if it exists
+                                const existingGallery = messageEl.querySelector('.screenshot-gallery');
+                                if (existingGallery) {
+                                    existingGallery.outerHTML = galleryHTML;
+                                    galleryEl = messageEl.querySelector('.screenshot-gallery');
+                                } else {
+                                    // Add to existing message
+                                    messageEl.innerHTML += galleryHTML;
+                                    galleryEl = messageEl.querySelector('.screenshot-gallery');
+                                }
+                            } else {
+                                // Create a new message
+                                messageEl = addMessage('', 'agent-message');
+                                messageEl.innerHTML = galleryHTML;
+                                galleryEl = messageEl.querySelector('.screenshot-gallery');
+                            }
+                            
+                            // Add event listeners to the new gallery
+                            initGalleryControls(galleryEl);
+                        } else {
+                            // Check if it's a placeholder gallery with no real slides
+                            const slides = galleryEl.querySelector('.gallery-slides');
+                            const firstSlide = slides.querySelector('.gallery-slide');
+                            const hasPlaceholder = firstSlide && firstSlide.querySelector('.placeholder-img');
+                            
+                            if (hasPlaceholder) {
+                                // Replace placeholder with actual image
+                                firstSlide.innerHTML = `
+                                    <img src="data:image/png;base64,${data.screenshot}" class="screenshot-img" alt="Browser screenshot" 
+                                         onerror="console.error('Image load error'); this.src='data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22800%22%20height%3D%22400%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20800%20400%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3Cstyle%20type%3D%22text%2Fcss%22%3E%23holder_1%20text%20%7B%20fill%3A%23555%3Bfont-weight%3Anormal%3Bfont-family%3AHelvetica%2C%20monospace%3Bfont-size%3A40pt%20%7D%20%3C%2Fstyle%3E%3C%2Fdefs%3E%3Cg%20id%3D%22holder_1%22%3E%3Crect%20width%3D%22800%22%20height%3D%22400%22%20fill%3D%22%23777%22%3E%3C%2Frect%3E%3Cg%3E%3Ctext%20x%3D%22285.921875%22%20y%3D%22217.7%22%3EImage%20Not%20Available%3C%2Ftext%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E';"
+                                         onload="console.log('Image loaded successfully');" />
+                                    <div class="screenshot-description">${data.description}</div>
+                                `;
+                            } else {
+                                // Add a new slide to the existing gallery
+                                const indicators = galleryEl.querySelector('.gallery-indicators');
+                                const firstBtn = galleryEl.querySelector('.first-btn');
+                                const prevBtn = galleryEl.querySelector('.prev-btn');
+                                const nextBtn = galleryEl.querySelector('.next-btn');
+                                const lastBtn = galleryEl.querySelector('.last-btn');
+                                
+                                // Get current slide count
+                                const currentSlideCount = slides.querySelectorAll('.gallery-slide').length;
+                                
+                                // Create new slide
+                                const newSlide = document.createElement('div');
+                                newSlide.className = 'gallery-slide';
+                                newSlide.setAttribute('data-index', currentSlideCount);
+                                newSlide.innerHTML = `
+                                    <img src="data:image/png;base64,${data.screenshot}" class="screenshot-img" alt="Browser screenshot" 
+                                         onerror="console.error('Image load error'); this.src='data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22800%22%20height%3D%22400%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20800%20400%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3Cstyle%20type%3D%22text%2Fcss%22%3E%23holder_1%20text%20%7B%20fill%3A%23555%3Bfont-weight%3Anormal%3Bfont-family%3AHelvetica%2C%20monospace%3Bfont-size%3A40pt%20%7D%20%3C%2Fstyle%3E%3C%2Fdefs%3E%3Cg%20id%3D%22holder_1%22%3E%3Crect%20width%3D%22800%22%20height%3D%22400%22%20fill%3D%22%23777%22%3E%3C%2Frect%3E%3Cg%3E%3Ctext%20x%3D%22285.921875%22%20y%3D%22217.7%22%3EImage%20Not%20Available%3C%2Ftext%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E';"
+                                         onload="console.log('Image loaded successfully');" />
+                                    <div class="screenshot-description">${data.description}</div>
+                                `;
+                                
+                                // Add new slide to gallery
+                                slides.appendChild(newSlide);
+                                
+                                // Reset buttons' initialization state to force re-adding event listeners
+                                galleryEl.removeAttribute('data-gallery-initialized');
+                                
+                                // Now completely reinitialize the gallery to ensure everything is correct
+                                galleryEl.setAttribute('data-slide-count', currentSlideCount + 1);
+                                galleryEl.setAttribute('data-active-index', currentSlideCount);
+                                
+                                // This replaces our previous approach of manually adding indicators and updating controls
+                                initGalleryControls(galleryEl);
+                                
+                                // Ensure we're showing the last slide (the one we just added)
+                                showSlide(galleryEl.id, currentSlideCount);
+                                
+                                // Make sure scrolled to bottom to show the latest
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                            }
+                        }
+                        
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
                         break;
                     case 'result':
                         if (thinkingMessageId) {
-                            updateMessage(thinkingMessageId, data.message, 'agent-message');
+                            const messageEl = document.querySelector(`[data-id="${thinkingMessageId}"]`);
+                            if (messageEl) {
+                                // Save existing gallery
+                                const existingGallery = messageEl.querySelector('.screenshot-gallery');
+                                const galleryHTML = existingGallery ? existingGallery.outerHTML : '';
+                                
+                                // Update message
+                                updateMessage(thinkingMessageId, data.message, 'agent-message');
+                                
+                                // Restore gallery if it existed, or add a placeholder
+                                setTimeout(() => {
+                                    const updatedEl = document.querySelector(`[data-id="${thinkingMessageId}"]`);
+                                    if (updatedEl) {
+                                        if (!updatedEl.querySelector('.screenshot-gallery')) {
+                                            if (galleryHTML) {
+                                                updatedEl.innerHTML += galleryHTML;
+                                            } else {
+                                                // Add placeholder if there was no previous gallery
+                                                const placeholderHTML = `
+                                                    <div class="screenshot-gallery" id="gallery-${Date.now()}">
+                                                        <div class="gallery-container">
+                                                            <div class="gallery-slides">
+                                                                <div class="gallery-slide active" data-index="0" style="display: flex;">
+                                                                    <div class="placeholder-img">
+                                                                        <i class="fas fa-image fa-3x"></i>
+                                                                    </div>
+                                                                    <div class="screenshot-description">No screenshots were captured</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="gallery-nav">
+                                                            <button class="gallery-btn first-btn" disabled>&laquo; First</button>
+                                                            <button class="gallery-btn prev-btn" disabled>&lsaquo; Prev</button>
+                                                            <button class="gallery-btn next-btn" disabled>Next &rsaquo;</button>
+                                                            <button class="gallery-btn last-btn" disabled>Last &raquo;</button>
+                                                        </div>
+                                                        <div class="gallery-indicators">
+                                                            <div class="gallery-indicator active" data-index="0"></div>
+                                                        </div>
+                                                    </div>
+                                                `;
+                                                updatedEl.innerHTML += placeholderHTML;
+                                            }
+                                            initGalleryControls(updatedEl.querySelector('.screenshot-gallery'));
+                                        }
+                                    }
+                                }, 50);
+                            } else {
+                                updateMessage(thinkingMessageId, data.message, 'agent-message');
+                            }
+                            
                             thinkingMessageId = null; // Clear thinking ID
                         } else {
-                            addMessage(data.message, 'agent-message');
+                            const messageEl = addMessage(data.message, 'agent-message');
+                            
+                            // Add placeholder gallery to the message
+                            const placeholderHTML = `
+                                <div class="screenshot-gallery" id="gallery-${Date.now()}">
+                                    <div class="gallery-container">
+                                        <div class="gallery-slides">
+                                            <div class="gallery-slide active" data-index="0" style="display: flex;">
+                                                <div class="placeholder-img">
+                                                    <i class="fas fa-image fa-3x"></i>
+                                                </div>
+                                                <div class="screenshot-description">No screenshots were captured</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="gallery-nav">
+                                        <button class="gallery-btn first-btn" disabled>&laquo; First</button>
+                                        <button class="gallery-btn prev-btn" disabled>&lsaquo; Prev</button>
+                                        <button class="gallery-btn next-btn" disabled>Next &rsaquo;</button>
+                                        <button class="gallery-btn last-btn" disabled>Last &raquo;</button>
+                                    </div>
+                                    <div class="gallery-indicators">
+                                        <div class="gallery-indicator active" data-index="0"></div>
+                                    </div>
+                                </div>
+                            `;
+                            messageEl.innerHTML += placeholderHTML;
+                            initGalleryControls(messageEl.querySelector('.screenshot-gallery'));
                         }
                         break;
                     case 'error':
                         if (thinkingMessageId) {
-                             updateMessage(thinkingMessageId, data.message, 'error');
-                             thinkingMessageId = null; // Clear thinking ID
+                            const messageEl = document.querySelector(`[data-id="${thinkingMessageId}"]`);
+                            if (messageEl) {
+                                // Save existing gallery
+                                const existingGallery = messageEl.querySelector('.screenshot-gallery');
+                                const galleryHTML = existingGallery ? existingGallery.outerHTML : '';
+                                
+                                // Update message
+                                updateMessage(thinkingMessageId, data.message, 'error');
+                                
+                                // Restore gallery if it existed, or add a placeholder
+                                setTimeout(() => {
+                                    const updatedEl = document.querySelector(`[data-id="${thinkingMessageId}"]`);
+                                    if (updatedEl) {
+                                        if (!updatedEl.querySelector('.screenshot-gallery')) {
+                                            if (galleryHTML) {
+                                                updatedEl.innerHTML += galleryHTML;
+                                            } else {
+                                                // Add placeholder if there was no previous gallery
+                                                const placeholderHTML = `
+                                                    <div class="screenshot-gallery" id="gallery-${Date.now()}">
+                                                        <div class="gallery-container">
+                                                            <div class="gallery-slides">
+                                                                <div class="gallery-slide active" data-index="0" style="display: flex;">
+                                                                    <div class="placeholder-img">
+                                                                        <i class="fas fa-exclamation-triangle fa-3x"></i>
+                                                                    </div>
+                                                                    <div class="screenshot-description">No screenshots were captured</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="gallery-nav">
+                                                            <button class="gallery-btn first-btn" disabled>&laquo; First</button>
+                                                            <button class="gallery-btn prev-btn" disabled>&lsaquo; Prev</button>
+                                                            <button class="gallery-btn next-btn" disabled>Next &rsaquo;</button>
+                                                            <button class="gallery-btn last-btn" disabled>Last &raquo;</button>
+                                                        </div>
+                                                        <div class="gallery-indicators">
+                                                            <div class="gallery-indicator active" data-index="0"></div>
+                                                        </div>
+                                                    </div>
+                                                `;
+                                                updatedEl.innerHTML += placeholderHTML;
+                                            }
+                                            initGalleryControls(updatedEl.querySelector('.screenshot-gallery'));
+                                        }
+                                    }
+                                }, 50);
+                            } else {
+                                updateMessage(thinkingMessageId, data.message, 'error');
+                            }
+                            thinkingMessageId = null; // Clear thinking ID
                         } else {
-                            addMessage(data.message, 'error');
+                            const messageEl = addMessage(data.message, 'error');
+                            
+                            // Add placeholder gallery to the message
+                            const placeholderHTML = `
+                                <div class="screenshot-gallery" id="gallery-${Date.now()}">
+                                    <div class="gallery-container">
+                                        <div class="gallery-slides">
+                                            <div class="gallery-slide active" data-index="0" style="display: flex;">
+                                                <div class="placeholder-img">
+                                                    <i class="fas fa-exclamation-triangle fa-3x"></i>
+                                                </div>
+                                                <div class="screenshot-description">No screenshots were captured</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="gallery-nav">
+                                        <button class="gallery-btn first-btn" disabled>&laquo; First</button>
+                                        <button class="gallery-btn prev-btn" disabled>&lsaquo; Prev</button>
+                                        <button class="gallery-btn next-btn" disabled>Next &rsaquo;</button>
+                                        <button class="gallery-btn last-btn" disabled>Last &raquo;</button>
+                                    </div>
+                                    <div class="gallery-indicators">
+                                        <div class="gallery-indicator active" data-index="0"></div>
+                                    </div>
+                                </div>
+                            `;
+                            messageEl.innerHTML += placeholderHTML;
+                            initGalleryControls(messageEl.querySelector('.screenshot-gallery'));
                         }
                         break;
                 }
@@ -452,6 +950,243 @@
             }
             // --- End Prompt History Feature ---
 
+            // Function to initialize the gallery controls
+            function initGalleryControls(galleryEl) {
+                // Check if already initialized
+                if (galleryEl.getAttribute('data-gallery-initialized') === 'true') {
+                    console.log("Gallery already initialized, skipping:", galleryEl.id);
+                    return;
+                }
+                
+                console.log("Initializing gallery controls for:", galleryEl.id);
+                galleryEl.setAttribute('data-gallery-initialized', 'true'); // Mark as initialized
+
+                const slides = galleryEl.querySelectorAll('.gallery-slide');
+                const firstBtn = galleryEl.querySelector('.first-btn');
+                const prevBtn = galleryEl.querySelector('.prev-btn');
+                const nextBtn = galleryEl.querySelector('.next-btn');
+                const lastBtn = galleryEl.querySelector('.last-btn');
+                
+                if (!slides.length) {
+                    console.warn('No slides found in gallery:', galleryEl.id);
+                    return;
+                }
+                
+                const slideCount = slides.length;
+                galleryEl.setAttribute('data-slide-count', slideCount);
+                console.log(`Gallery ${galleryEl.id} has ${slideCount} slides`);
+                
+                // Initialize slide indices and hide all slides initially
+                slides.forEach((slide, idx) => {
+                    slide.setAttribute('data-index', idx);
+                    slide.style.display = 'none';
+                    slide.classList.remove('active');
+                });
+                
+                // Clear existing event listeners by cloning and replacing buttons
+                if (firstBtn) {
+                    const newFirstBtn = firstBtn.cloneNode(true);
+                    firstBtn.parentNode.replaceChild(newFirstBtn, firstBtn);
+                    newFirstBtn.addEventListener('click', function() {
+                        console.log(`First button clicked for gallery: ${galleryEl.id}`);
+                        navigateGallery(galleryEl, 0);
+                    });
+                }
+                
+                if (prevBtn) {
+                    const newPrevBtn = prevBtn.cloneNode(true);
+                    prevBtn.parentNode.replaceChild(newPrevBtn, prevBtn);
+                    newPrevBtn.addEventListener('click', function() {
+                        const currentIndex = parseInt(galleryEl.getAttribute('data-active-index') || '0');
+                        console.log(`Prev button clicked for gallery: ${galleryEl.id}, current index: ${currentIndex}`);
+                        navigateGallery(galleryEl, currentIndex - 1);
+                    });
+                }
+                
+                if (nextBtn) {
+                    const newNextBtn = nextBtn.cloneNode(true);
+                    nextBtn.parentNode.replaceChild(newNextBtn, nextBtn);
+                    newNextBtn.addEventListener('click', function() {
+                        const currentIndex = parseInt(galleryEl.getAttribute('data-active-index') || '0');
+                        console.log(`Next button clicked for gallery: ${galleryEl.id}, current index: ${currentIndex}`);
+                        navigateGallery(galleryEl, currentIndex + 1);
+                    });
+                }
+                
+                if (lastBtn) {
+                    const newLastBtn = lastBtn.cloneNode(true);
+                    lastBtn.parentNode.replaceChild(newLastBtn, lastBtn);
+                    newLastBtn.addEventListener('click', function() {
+                        const slideCount = parseInt(galleryEl.getAttribute('data-slide-count') || '1');
+                        console.log(`Last button clicked for gallery: ${galleryEl.id}, slide count: ${slideCount}`);
+                        navigateGallery(galleryEl, slideCount - 1);
+                    });
+                }
+                
+                // Show first slide by default if no active index is set
+                const activeIndex = parseInt(galleryEl.getAttribute('data-active-index') || '0');
+                navigateGallery(galleryEl, activeIndex);
+            }
+            
+            // Simpler function to navigate within a gallery
+            function navigateGallery(galleryEl, targetIndex) {
+                console.log(`navigateGallery called for gallery: ${galleryEl.id}, target index: ${targetIndex}`);
+                
+                const slides = galleryEl.querySelectorAll('.gallery-slide');
+                const firstBtn = galleryEl.querySelector('.first-btn');
+                const prevBtn = galleryEl.querySelector('.prev-btn');
+                const nextBtn = galleryEl.querySelector('.next-btn');
+                const lastBtn = galleryEl.querySelector('.last-btn');
+                
+                if (!slides.length) {
+                    console.warn('No slides found in gallery:', galleryEl.id);
+                    return;
+                }
+                
+                // Validate index
+                targetIndex = parseInt(targetIndex);
+                if (isNaN(targetIndex)) {
+                    console.error('Invalid slide index:', targetIndex);
+                    targetIndex = 0;
+                }
+                
+                const slideCount = slides.length;
+                console.log(`Gallery has ${slideCount} slides`);
+                
+                // Ensure index is in valid range
+                if (targetIndex < 0) targetIndex = 0;
+                if (targetIndex >= slideCount) targetIndex = slideCount - 1;
+                
+                console.log(`Showing slide ${targetIndex + 1}/${slideCount} in gallery ${galleryEl.id}`);
+                
+                // Update current slide
+                slides.forEach((slide, idx) => {
+                    if (idx === targetIndex) {
+                        slide.style.display = 'flex'; // Use flex display
+                        slide.classList.add('active');
+                    } else {
+                        slide.style.display = 'none';
+                        slide.classList.remove('active');
+                    }
+                });
+                
+                // Update indicators
+                const indicatorsContainer = galleryEl.querySelector('.gallery-indicators');
+                if (indicatorsContainer) {
+                    const indicators = indicatorsContainer.querySelectorAll('.gallery-indicator');
+                    
+                    // Create or update indicators
+                    if (indicators.length === slideCount) {
+                        // Update existing indicators
+                        indicators.forEach((indicator, idx) => {
+                            if (idx === targetIndex) {
+                                indicator.classList.add('active');
+                            } else {
+                                indicator.classList.remove('active');
+                            }
+                        });
+                    } else {
+                        // Recreate all indicators
+                        indicatorsContainer.innerHTML = '';
+                        
+                        for (let i = 0; i < slideCount; i++) {
+                            const indicator = document.createElement('div');
+                            indicator.className = 'gallery-indicator';
+                            if (i === targetIndex) {
+                                indicator.classList.add('active');
+                            }
+                            indicator.setAttribute('data-index', i);
+                            
+                            // Use closure to capture correct gallery element and index
+                            (function(gallery, index) {
+                                indicator.addEventListener('click', function() {
+                                    console.log(`Indicator clicked for gallery: ${gallery.id}, index: ${index}`);
+                                    navigateGallery(gallery, index);
+                                });
+                            })(galleryEl, i);
+                            
+                            indicatorsContainer.appendChild(indicator);
+                        }
+                    }
+                }
+                
+                // Update button states
+                if (firstBtn) {
+                    firstBtn.disabled = (targetIndex === 0);
+                    console.log(`First button disabled: ${firstBtn.disabled}`);
+                }
+                
+                if (prevBtn) {
+                    prevBtn.disabled = (targetIndex === 0);
+                    console.log(`Prev button disabled: ${prevBtn.disabled}`);
+                }
+                
+                if (nextBtn) {
+                    nextBtn.disabled = (targetIndex === slideCount - 1);
+                    console.log(`Next button disabled: ${nextBtn.disabled}`);
+                }
+                
+                if (lastBtn) {
+                    lastBtn.disabled = (targetIndex === slideCount - 1);
+                    console.log(`Last button disabled: ${lastBtn.disabled}`);
+                }
+                
+                // Store current index
+                galleryEl.setAttribute('data-active-index', targetIndex);
+            }
+            
+            // Keeping showSlide for backward compatibility
+            function showSlide(galleryId, index) {
+                console.log(`showSlide called with galleryId: ${galleryId}, index: ${index}`);
+                
+                let galleryEl = document.getElementById(galleryId);
+                if (!galleryEl) {
+                    console.warn(`Gallery not found by ID: ${galleryId}, trying querySelector`);
+                    galleryEl = document.querySelector(`.screenshot-gallery[id="${galleryId}"]`);
+                    if (!galleryEl) {
+                        console.error('Gallery not found even with querySelector, aborting');
+                        return;
+                    }
+                }
+                
+                navigateGallery(galleryEl, index);
+            }
+            
+            // Ensure all galleries on the page have event listeners
+            function initAllGalleries() {
+                // This function is now primarily handled by the MutationObserver
+                // Keeping it for potential future use, but removing the immediate call.
+                document.querySelectorAll('.screenshot-gallery').forEach(gallery => {
+                    initGalleryControls(gallery);
+                });
+            }
+            
+            // Initialize any galleries on the page - REMOVED
+            // initAllGalleries(); 
+            
+            // Also attach a mutation observer to initialize galleries added dynamically
+            const observer = new MutationObserver(mutations => {
+                mutations.forEach(mutation => {
+                    if (mutation.addedNodes.length) {
+                        mutation.addedNodes.forEach(node => {
+                            if (node.nodeType === 1) { // Element node
+                                // Check if the added node itself is a gallery
+                                if (node.classList && node.classList.contains('screenshot-gallery')) {
+                                    initGalleryControls(node);
+                                }
+                                // Check for galleries within the added node
+                                const galleries = node.querySelectorAll('.screenshot-gallery');
+                                galleries.forEach(gallery => {
+                                    initGalleryControls(gallery);
+                                });
+                            }
+                        });
+                    }
+                });
+            });
+            
+            observer.observe(chatMessages, { childList: true, subtree: true });
+            
             // Theme Toggle Logic
             function setTheme(theme) {
                 document.body.classList.remove('light-mode', 'dark-mode');

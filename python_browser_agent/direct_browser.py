@@ -1,30 +1,50 @@
-import os
-import json
 import asyncio
+import json
 import logging
-from typing import Dict, Any, List, Optional, Callable
+import sys
+import os
+from datetime import datetime
+from typing import Dict, Callable, Optional, List, Any, Union
 
 # Import browser functionality directly
 from browser_use import Browser
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_community.chat_models import ChatOllama
 from langchain_community.chat_models.fake import FakeListChatModel
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('direct_browser.log')
-    ]
-)
-logger = logging.getLogger(__name__)
+# Configure logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("direct_browser")
 logger.setLevel(logging.DEBUG)
+
+# Add file handler
+file_handler = logging.FileHandler("direct_browser.log")
+file_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
 
 # Enable Playwright debug logging
 # os.environ["DEBUG"] = "pw:api,pw:browser"
 # os.environ["PLAYWRIGHT_DRIVER_VERBOSE"] = "1"
+
+# Check if playwright is installed and install if needed
+try:
+    import playwright
+except ImportError:
+    import subprocess
+    import sys
+    logger.warning("Playwright not found, installing...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "playwright"])
+    subprocess.check_call([sys.executable, "-m", "playwright", "install"])
+    logger.info("Playwright installed successfully")
+
+from playwright.async_api import async_playwright
+
+# Create screenshots directory if it doesn't exist
+SCREENSHOTS_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
+os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
+logger.info(f"Screenshots will be saved in: {SCREENSHOTS_DIR}")
 
 class SafeJsonChatOllamaWrapper:
     """A wrapper around ChatOllama that ensures valid JSON output."""
@@ -168,8 +188,7 @@ class DirectBrowser:
             logger.debug("Creating browser instance")
             try:
                 # Create browser instance with context and page
-                import playwright.async_api as pw
-                playwright = await pw.async_playwright().start()
+                playwright = await async_playwright().start()
                 browser = await playwright.chromium.launch(
                     headless=True,
                     args=[
@@ -207,18 +226,46 @@ class DirectBrowser:
         
         return self.browser
     
-    async def _take_screenshot(self, filename="screenshot.png"):
-        """Take a screenshot and save it."""
+    async def _take_screenshot(self, filename=None):
+        """Take a screenshot and save it with a timestamp."""
         if not self.browser or not hasattr(self.browser, 'page'):
             logger.error("Browser or page not initialized")
-            return
+            return None
 
-        logger.debug(f"Taking screenshot: {filename}")
+        # Generate a timestamp-based filename if none is provided
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            filename = f"screenshot_{timestamp}.png"
+        
+        # Ensure the path is within the screenshots directory
+        filepath = os.path.join(SCREENSHOTS_DIR, filename)
+        
+        logger.debug(f"Taking screenshot: {filepath}")
         try:
-            await self.browser.page.screenshot(path=filename)
-            logger.debug("Screenshot taken successfully")
+            await self.browser.page.screenshot(path=filepath)
+            logger.debug(f"Screenshot saved to {filepath}")
+            return filepath
         except Exception as e:
             logger.error(f"Error taking screenshot: {str(e)}", exc_info=True)
+            return None
+    
+    async def _take_screenshot_base64(self):
+        """Take a screenshot and return it as base64 encoded string."""
+        if not self.browser or not hasattr(self.browser, 'page'):
+            logger.error("Browser or page not initialized")
+            return None
+
+        logger.debug("Taking screenshot as base64")
+        try:
+            # Take screenshot and return as base64
+            screenshot_bytes = await self.browser.page.screenshot()
+            import base64
+            screenshot_base64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+            logger.debug("Screenshot taken successfully as base64")
+            return screenshot_base64
+        except Exception as e:
+            logger.error(f"Error taking screenshot as base64: {str(e)}", exc_info=True)
+            return None
     
     async def _get_page_content(self):
         """Get the text content of the current page."""
@@ -333,7 +380,7 @@ class DirectBrowser:
                 ]
                 return FakeListChatModel(responses=fake_responses)
     
-    async def run_task(self, instruction: str):
+    async def run_task(self, instruction: str, callbacks=None):
         """Run a task using either fake LLM or Ollama."""
         logger.debug(f"Running task with instruction: {instruction}")
         
@@ -342,6 +389,15 @@ class DirectBrowser:
         
         # Set up browser
         await self._setup_browser()
+        
+        # Generate a unique session ID for this task
+        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Send initial screenshot if callbacks are provided
+        initial_screenshot = await self._take_screenshot_base64()
+        initial_screenshot_path = await self._take_screenshot(f"initial_{session_id}.png")
+        if callbacks and "on_screenshot" in callbacks and initial_screenshot:
+            callbacks["on_screenshot"](initial_screenshot, f"Initial state {initial_screenshot_path}")
         
         # Get first LLM response
         logger.debug("Getting first LLM response")
@@ -354,19 +410,32 @@ class DirectBrowser:
             action_data = json.loads(content)
             logger.debug(f"Parsed action: {action_data}")
             
+            if callbacks and "on_progress" in callbacks:
+                callbacks["on_progress"](f"Planning to {action_data['action']}")
+            
             if action_data["action"] == "navigate":
                 url = action_data["url"]
                 logger.debug(f"Executing navigate action to {url}")
+                
+                if callbacks and "on_progress" in callbacks:
+                    callbacks["on_progress"](f"Navigating to {url}")
+                
                 success = await self.navigate(url)
                 
                 if success:
-                    # Take a screenshot
-                    await self._take_screenshot(filename="navigation_result.png")
+                    # Take a screenshot and send it if callbacks are provided
+                    navigation_screenshot = await self._take_screenshot_base64()
+                    navigation_screenshot_path = await self._take_screenshot(f"navigation_{session_id}.png")
+                    if callbacks and "on_screenshot" in callbacks and navigation_screenshot:
+                        callbacks["on_screenshot"](navigation_screenshot, f"Navigated to {url} {navigation_screenshot_path}")
                     
                     # Get page content for LLM
                     page_content = await self._get_page_content()
                     observation = f"Navigated to {url}. Page content: {page_content[:1000]}..."
                     logger.debug(f"Getting second LLM response with observation: {observation[:100]}...")
+                    
+                    if callbacks and "on_progress" in callbacks:
+                        callbacks["on_progress"](f"Analyzing page content from {url}")
                     
                     response = llm.invoke([
                         HumanMessage(content=instruction),
@@ -379,6 +448,12 @@ class DirectBrowser:
                     # Parse the final response
                     final_content = response.content
                     final_action = json.loads(final_content)
+                    
+                    # Take a final screenshot after analysis
+                    final_screenshot = await self._take_screenshot_base64()
+                    final_screenshot_path = await self._take_screenshot(f"final_{session_id}.png")
+                    if callbacks and "on_screenshot" in callbacks and final_screenshot:
+                        callbacks["on_screenshot"](final_screenshot, f"Final state {final_screenshot_path}")
                     
                     if final_action["action"] == "finish":
                         return f"Task completed: {final_action['result']}"
@@ -393,12 +468,23 @@ class DirectBrowser:
                         # Could implement other actions like click, type, etc.
                         return f"Unhandled action in final step: {final_action['action']}"
                 else:
+                    # Take screenshot of failed navigation
+                    error_screenshot = await self._take_screenshot_base64()
+                    error_screenshot_path = await self._take_screenshot(f"error_{session_id}.png")
+                    if callbacks and "on_screenshot" in callbacks and error_screenshot:
+                        callbacks["on_screenshot"](error_screenshot, f"Navigation failed {error_screenshot_path}")
+                    
                     return "Failed to navigate to the URL."
             else:
                 return f"Unexpected first action: {action_data['action']}"
                 
         except Exception as e:
             logger.error(f"Error executing task: {str(e)}", exc_info=True)
+            # Take error screenshot
+            error_screenshot = await self._take_screenshot_base64()
+            error_screenshot_path = await self._take_screenshot(f"exception_{session_id}.png")
+            if callbacks and "on_screenshot" in callbacks and error_screenshot:
+                callbacks["on_screenshot"](error_screenshot, f"Error: {str(e)} {error_screenshot_path}")
             return f"Error: {str(e)}"
     
     def execute(self, instruction: str, callbacks: Optional[Dict[str, Callable]] = None) -> str:
@@ -411,7 +497,7 @@ class DirectBrowser:
             asyncio.set_event_loop(loop)
             
             # Run the task
-            result = loop.run_until_complete(self.run_task(instruction))
+            result = loop.run_until_complete(self.run_task(instruction, callbacks))
             logger.debug(f"Task execution completed: {result}")
             
             if callbacks and "on_progress" in callbacks:

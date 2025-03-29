@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from direct_browser import create_direct_browser 
 import atexit
 import signal
+import argparse
 
 # Load environment variables
 load_dotenv()
@@ -57,10 +58,21 @@ def handle_message(message):
                 'message': progress
             })
         
+        # Define screenshot callback
+        def screenshot_callback(screenshot_base64, description):
+            socketio.emit('agent response', {
+                'type': 'screenshot',
+                'screenshot': screenshot_base64,
+                'description': description
+            })
+        
         # Execute the instruction
         result = browser_agent.execute(
             instruction=message,
-            callbacks={'on_progress': progress_callback}
+            callbacks={
+                'on_progress': progress_callback,
+                'on_screenshot': screenshot_callback
+            }
         )
         
         # Send the final result
@@ -117,10 +129,16 @@ signal.signal(signal.SIGINT, signal_handler)
 
 if __name__ == '__main__':
     try:
+        # Parse command line arguments for port
+        parser = argparse.ArgumentParser(description='Run the browser agent server')
+        parser.add_argument('--port', type=int, default=int(os.getenv('PORT', 3001)),
+                           help='Port to run the server on')
+        args = parser.parse_args()
+        
         # Create initial browser agent
         browser_agent = create_direct_browser(use_fake_llm=False)
-        # Get port from environment variable or use default
-        port = int(os.getenv('PORT', 3001))
+        # Get port from command line or environment variable
+        port = args.port
         print(f"Starting server on port {port}")
         # Use the correct Flask-SocketIO configuration
         # Disable the reloader to prevent interference with the browser process
