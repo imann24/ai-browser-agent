@@ -413,70 +413,87 @@ class DirectBrowser:
             if callbacks and "on_progress" in callbacks:
                 callbacks["on_progress"](f"Planning to {action_data['action']}")
             
-            if action_data["action"] == "navigate":
-                url = action_data["url"]
-                logger.debug(f"Executing navigate action to {url}")
+            # Store message history
+            message_history = [
+                HumanMessage(content=instruction),
+                AIMessage(content=content)  # First LLM response
+            ]
+            
+            # Start the action loop - will continue as long as we have navigate actions
+            navigation_count = 0
+            current_action = action_data
+            
+            while current_action["action"] == "navigate" and navigation_count < 10:  # Limit to 10 steps to prevent infinite loops
+                navigation_count += 1
+                url = current_action["url"]
+                logger.debug(f"Executing navigate action #{navigation_count} to {url}")
                 
                 if callbacks and "on_progress" in callbacks:
                     callbacks["on_progress"](f"Navigating to {url}")
                 
                 success = await self.navigate(url)
                 
-                if success:
-                    # Take a screenshot and send it if callbacks are provided
-                    navigation_screenshot = await self._take_screenshot_base64()
-                    navigation_screenshot_path = await self._take_screenshot(f"navigation_{session_id}.png")
-                    if callbacks and "on_screenshot" in callbacks and navigation_screenshot:
-                        callbacks["on_screenshot"](navigation_screenshot, f"Navigated to {url} {navigation_screenshot_path}")
-                    
-                    # Get page content for LLM
-                    page_content = await self._get_page_content()
-                    observation = f"Navigated to {url}. Page content: {page_content[:1000]}..."
-                    logger.debug(f"Getting second LLM response with observation: {observation[:100]}...")
-                    
-                    if callbacks and "on_progress" in callbacks:
-                        callbacks["on_progress"](f"Analyzing page content from {url}")
-                    
-                    response = llm.invoke([
-                        HumanMessage(content=instruction),
-                        AIMessage(content=content),  # First LLM response
-                        HumanMessage(content=observation)  # Our observation
-                    ])
-                    
-                    logger.debug(f"Final LLM response: {response}")
-                    
-                    # Parse the final response
-                    final_content = response.content
-                    final_action = json.loads(final_content)
-                    
-                    # Take a final screenshot after analysis
-                    final_screenshot = await self._take_screenshot_base64()
-                    final_screenshot_path = await self._take_screenshot(f"final_{session_id}.png")
-                    if callbacks and "on_screenshot" in callbacks and final_screenshot:
-                        callbacks["on_screenshot"](final_screenshot, f"Final state {final_screenshot_path}")
-                    
-                    if final_action["action"] == "finish":
-                        return f"Task completed: {final_action['result']}"
-                    elif final_action["action"] == "find":
-                        # Handle find action
-                        text_to_find = final_action.get("text", "")
-                        if text_to_find:
-                            return f"Found information: {text_to_find}"
-                        else:
-                            return "Found something but no text was provided"
-                    else:
-                        # Could implement other actions like click, type, etc.
-                        return f"Unhandled action in final step: {final_action['action']}"
-                else:
+                if not success:
                     # Take screenshot of failed navigation
                     error_screenshot = await self._take_screenshot_base64()
-                    error_screenshot_path = await self._take_screenshot(f"error_{session_id}.png")
+                    error_screenshot_path = await self._take_screenshot(f"error_{session_id}_{navigation_count}.png")
                     if callbacks and "on_screenshot" in callbacks and error_screenshot:
                         callbacks["on_screenshot"](error_screenshot, f"Navigation failed {error_screenshot_path}")
                     
-                    return "Failed to navigate to the URL."
+                    return f"Failed to navigate to the URL: {url}"
+                
+                # Navigation was successful
+                # Take a screenshot and send it if callbacks are provided
+                navigation_screenshot = await self._take_screenshot_base64()
+                navigation_screenshot_path = await self._take_screenshot(f"navigation_{session_id}_{navigation_count}.png")
+                if callbacks and "on_screenshot" in callbacks and navigation_screenshot:
+                    callbacks["on_screenshot"](navigation_screenshot, f"Navigated to {url} {navigation_screenshot_path}")
+                
+                # Get page content for LLM
+                page_content = await self._get_page_content()
+                observation = f"Navigated to {url}. Page content: {page_content[:1000]}..."
+                logger.debug(f"Getting LLM response with observation: {observation[:100]}...")
+                
+                if callbacks and "on_progress" in callbacks:
+                    callbacks["on_progress"](f"Analyzing page content from {url}")
+                
+                # Add the observation to message history
+                message_history.append(HumanMessage(content=observation))
+                
+                # Get next LLM response
+                response = llm.invoke(message_history)
+                logger.debug(f"LLM response after navigation #{navigation_count}: {response}")
+                
+                # Parse the response
+                current_content = response.content
+                current_action = json.loads(current_content)
+                
+                # Add the LLM response to message history
+                message_history.append(AIMessage(content=current_content))
+                
+                # Take a screenshot after analysis
+                analysis_screenshot = await self._take_screenshot_base64()
+                analysis_screenshot_path = await self._take_screenshot(f"analysis_{session_id}_{navigation_count}.png")
+                if callbacks and "on_screenshot" in callbacks and analysis_screenshot:
+                    callbacks["on_screenshot"](analysis_screenshot, f"Analysis after navigation #{navigation_count} {analysis_screenshot_path}")
+            
+            # We've either reached a non-navigate action or hit the maximum number of steps
+            if navigation_count >= 10 and current_action["action"] == "navigate":
+                return f"Reached maximum navigation depth (10 steps). Last action was: {current_action['action']} to {current_action.get('url', 'unknown URL')}"
+            
+            # Handle the final action (either finish, find, or something else)
+            if current_action["action"] == "finish":
+                return f"Task completed after {navigation_count} navigation steps: {current_action['result']}"
+            elif current_action["action"] == "find":
+                # Handle find action
+                text_to_find = current_action.get("text", "")
+                if text_to_find:
+                    return f"Found information after {navigation_count} navigation steps: {text_to_find}"
+                else:
+                    return f"Found something after {navigation_count} navigation steps but no text was provided"
             else:
-                return f"Unexpected first action: {action_data['action']}"
+                # Could implement other actions like click, type, etc.
+                return f"Unhandled action after {navigation_count} navigation steps: {current_action['action']}"
                 
         except Exception as e:
             logger.error(f"Error executing task: {str(e)}", exc_info=True)
