@@ -1,6 +1,6 @@
 import os
 import json
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, send_from_directory
 from flask_socketio import SocketIO
 from dotenv import load_dotenv
 # Use the direct browser instead for better JSON handling
@@ -12,7 +12,7 @@ import argparse
 # Load environment variables
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -21,8 +21,13 @@ browser_agent = None
 
 @app.route('/')
 def index():
-    """Render the chat interface."""
-    return render_template('index.html')
+    """Serve the React app."""
+    return send_from_directory(app.static_folder, 'index.html')
+
+@app.errorhandler(404)
+def not_found(e):
+    """Handle all other routes to support React Router."""
+    return send_from_directory(app.static_folder, 'index.html')
 
 @socketio.on('connect')
 def handle_connect():

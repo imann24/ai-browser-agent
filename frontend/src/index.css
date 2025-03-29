@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .message {
+    @apply mb-4 p-3 rounded-md max-w-[70%];
+  }
+  
+  .user-message {
+    @apply bg-user-light text-user-lightText dark:bg-user-dark dark:text-user-darkText self-end ml-auto;
+  }
+  
+  .agent-message {
+    @apply bg-agent-light border border-agent-lightBorder text-black dark:bg-agent-dark dark:border-agent-darkBorder dark:text-white self-start;
+  }
+  
+  .thinking {
+    @apply bg-thinking-light text-thinking-lightText dark:bg-thinking-dark dark:text-thinking-darkText;
+  }
+  
+  .progress-message {
+    @apply bg-progress-light text-progress-lightText dark:bg-progress-dark dark:text-progress-darkText;
+  }
+  
+  .error {
+    @apply bg-error-light text-error-lightText dark:bg-error-dark dark:text-error-darkText;
+  }
+}
+
+/* Apply background and text colors to body based on theme */
+body {
+  @apply bg-white text-gray-900 dark:bg-gray-900 dark:text-white transition-colors duration-200;
+} 
