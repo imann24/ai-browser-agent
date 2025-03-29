@@ -17,13 +17,15 @@ git clone https://github.com/yourusername/browser-agent.git
 cd browser-agent
 ```
 
+### Backend Setup
+
 2. Create a virtual environment and activate it:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-3. Install dependencies:
+3. Install Python dependencies:
 ```bash
 pip install browser-use langchain-community langchain-core
 ```
@@ -39,15 +41,21 @@ ollama serve
 ollama pull llama3
 ```
 
-6. Set up the frontend (one-time setup):
+### Frontend Setup
+
+6. Navigate to the frontend directory:
 ```bash
-# Build the React frontend
-./build.sh
+cd frontend
+```
+
+7. Install Node.js dependencies:
+```bash
+npm install
 ```
 
 ## Usage
 
-### Quick Start
+### Backend Usage
 
 The recommended way to use Browser Agent is with the Direct Browser implementation:
 
@@ -64,25 +72,30 @@ python -m python_browser_agent.run_direct_browser --fake-llm
 
 ### Web Interface
 
-You can also use the web-based chat interface with the React frontend:
+You can use the web-based chat interface by running both the frontend and backend separately:
 
-1. Start the server:
+1. Start the backend server (from the project root):
 ```bash
 python -m python_browser_agent.app
 ```
 
-2. Open your browser and navigate to:
-```
-http://localhost:3001
+2. In a separate terminal, start the frontend development server:
+```bash
+cd frontend
+npm start
 ```
 
-3. Enter your instructions in the chat interface and watch the agent perform the requested tasks.
+3. Open your browser and navigate to:
+```
+http://localhost:3000
+```
+
+4. Enter your instructions in the chat interface and watch the agent perform the requested tasks.
 
 ### Frontend Development
 
 If you want to work on the frontend:
 
-1. Option 1: Run both servers separately (recommended for more reliable Python imports):
 ```bash
 # In terminal 1
 cd frontend
@@ -94,24 +107,7 @@ npm start
 python -m python_browser_agent.app
 ```
 
-2. Option 2: Run everything in a single terminal:
-```bash
-# First time setup
-cd frontend && npm install && npm run start:all
-
-# Subsequent runs
-cd frontend && npm run start:all
-```
-
-**Note**: If you encounter Python import issues with the single-terminal approach, use Option 1 instead, or modify your PYTHONPATH environment variable manually:
-
-```bash
-# On macOS/Linux
-PYTHONPATH=$PYTHONPATH:. python -m python_browser_agent.app
-
-# On Windows PowerShell
-$env:PYTHONPATH="$env:PYTHONPATH;." ; python -m python_browser_agent.app
-```
+**Note**: The backend server runs on port 3001 by default, while the frontend development server runs on port 3000.
 
 ### Example Commands
 

@@ -1,6 +1,6 @@
 import os
 import json
-from flask import Flask, render_template, request, send_from_directory
+from flask import Flask, request, send_from_directory
 from flask_socketio import SocketIO
 from dotenv import load_dotenv
 # Use the direct browser instead for better JSON handling
