@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Agent</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; margin: 0; background-color: #f4f4f4; }
+        #controls { padding: 10px; background-color: #eee; border-bottom: 1px solid #ccc; display: flex; align-items: center; }
+        #controls input { flex-grow: 1; margin-right: 10px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        #controls button { padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        #controls button:hover { background-color: #0056b3; }
+        #browser-view { flex-grow: 1; border: none; }
+        #logs { height: 200px; overflow-y: scroll; border-top: 1px solid #ccc; padding: 10px; background-color: #fff; font-family: monospace; white-space: pre-wrap; }
+        .log-entry { margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px dashed #eee; }
+        .log-timestamp { color: #888; margin-right: 10px; }
+        .log-level-DEBUG { color: #666; }
+        .log-level-INFO { color: #007bff; }
+        .log-level-WARNING { color: orange; }
+        .log-level-ERROR { color: red; font-weight: bold; }
+        .log-message { }
+        #loading-spinner {
+            display: none; /* Hidden by default */
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: #007bff;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <input type="text" id="prompt-input" placeholder="Enter your command...">
+        <button id="run-button">Run</button>
+        <div id="loading-spinner"></div>
+    </div>
+    <iframe id="browser-view" src="about:blank"></iframe>
+    <div id="logs"></div>
+
+    <script>
+        const promptInput = document.getElementById('prompt-input');
+        const runButton = document.getElementById('run-button');
+        const browserView = document.getElementById('browser-view');
+        const logsContainer = document.getElementById('logs');
+        const loadingSpinner = document.getElementById('loading-spinner'); // Get spinner element
+
+        // --- Prompt History ---
+
+        async function runAgent() {
+            const prompt = promptInput.value;
+            if (!prompt) return;
+
+            addLog('INFO', `Running agent with prompt: ${prompt}`);
+            promptInput.disabled = true;
+            runButton.disabled = true;
+            loadingSpinner.style.display = 'block'; // Show spinner
+
+            // Add to history
+
+            try {
+                const response = await fetch('/run', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt: prompt }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                addLog('INFO', `Agent finished: ${JSON.stringify(result)}`);
+                // Maybe update browser view or show result message?
+                // For now, just re-enable controls.
+
+            } catch (error) {
+                console.error('Error running agent:', error);
+                addLog('ERROR', `Error running agent: ${error.message}`);
+            } finally {
+                promptInput.disabled = false;
+                runButton.disabled = false;
+                loadingSpinner.style.display = 'none'; // Hide spinner
+                promptInput.value = ''; // Clear input after running
+                promptInput.focus(); // Keep focus on input
+                historyIndex = -1; // Reset history index
+            }
+        }
+
+        runButton.addEventListener('click', runAgent);
+    </script>
+</body>
+</html> 
