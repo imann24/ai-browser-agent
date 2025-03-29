@@ -10,7 +10,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ sendMessage, isDisabled }) => {
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [currentInput, setCurrentInput] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Load prompt history from localStorage
   useEffect(() => {
@@ -21,8 +21,8 @@ const ChatInput: React.FC<ChatInputProps> = ({ sendMessage, isDisabled }) => {
     }
     setHistoryIndex(JSON.parse(savedHistory || '[]').length);
     
-    // Focus the input on load
-    inputRef.current?.focus();
+    // Focus the textarea on load
+    textareaRef.current?.focus();
   }, []);
 
   // Save prompt history to localStorage when it changes
@@ -47,8 +47,20 @@ const ChatInput: React.FC<ChatInputProps> = ({ sendMessage, isDisabled }) => {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle Shift+Enter to create new lines
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault(); // Prevent default newline
+      handleSubmit(e as unknown as React.FormEvent);
+      return;
+    }
+
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (!e.ctrlKey && !e.metaKey) {
+        // Only intercept arrow keys for history when used with Ctrl/Cmd
+        return;
+      }
+
       if (historyIndex === promptHistory.length) {
         // Store current potentially unsaved input before navigating
         setCurrentInput(message);
@@ -71,28 +83,39 @@ const ChatInput: React.FC<ChatInputProps> = ({ sendMessage, isDisabled }) => {
           setMessage(currentInput);
         }
       }
-    } else {
+    } else if (e.key !== 'Enter' && e.key !== 'Shift') {
       // Any other key press means the user is typing something new
       setHistoryIndex(promptHistory.length);
       setCurrentInput('');
     }
   };
 
+  // Auto-resize textarea height based on content
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const textarea = e.target;
+    setMessage(textarea.value);
+    
+    // Reset height to auto to correctly calculate the new height
+    textarea.style.height = 'auto';
+    // Set the height to match the content (plus a small buffer)
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  };
+
   return (
     <form onSubmit={handleSubmit} className="flex p-3 bg-gray-100 dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700">
-      <input
-        ref={inputRef}
-        type="text"
+      <textarea
+        ref={textareaRef}
         value={message}
-        onChange={e => setMessage(e.target.value)}
+        onChange={handleTextareaChange}
         onKeyDown={handleKeyDown}
-        placeholder="Type your instruction here..."
-        className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-md mr-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+        placeholder="Type your instruction here... (Shift+Enter for new line)"
+        className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-md mr-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none overflow-hidden min-h-[38px] max-h-[200px]"
         disabled={isDisabled}
+        rows={1}
       />
       <button
         type="submit"
-        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed h-fit"
         disabled={isDisabled || !message.trim()}
       >
         Send
